@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Layout Descriptor</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+        }
+
+        .upload-area {
+            background: white;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: border-color 0.3s;
+        }
+
+        .upload-area:hover {
+            border-color: #3498db;
+        }
+
+        .upload-area.dragover {
+            border-color: #3498db;
+            background-color: #ebf5fb;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-btn {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .upload-btn:hover {
+            background-color: #2980b9;
+        }
+
+        .upload-btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .file-name {
+            margin-top: 15px;
+            color: #27ae60;
+            font-weight: 500;
+        }
+
+        .analyze-btn {
+            display: block;
+            width: 100%;
+            background-color: #27ae60;
+            color: white;
+            padding: 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .analyze-btn:hover {
+            background-color: #219a52;
+        }
+
+        .analyze-btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .result-area {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .result-area h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        .page-row {
+            display: flex;
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .page-thumbnail {
+            flex-shrink: 0;
+            padding: 15px;
+            background: #f8f9fa;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .page-thumbnail img {
+            height: 150px;
+            width: auto;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .page-description {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .page-header {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .page-content {
+            white-space: pre-wrap;
+            line-height: 1.6;
+            color: #444;
+            font-size: 14px;
+            flex: 1;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 10px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background-color: #fee;
+            border: 1px solid #fcc;
+            color: #c00;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .progress-text {
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>PDF Layout Descriptor</h1>
+    <p class="subtitle">Upload a PDF to get an AI-generated description of each page's layout</p>
+
+    <div class="upload-area" id="dropZone">
+        <p>Drag and drop a PDF here, or</p>
+        <label class="upload-btn">
+            Choose File
+            <input type="file" id="fileInput" accept=".pdf">
+        </label>
+        <p class="file-name" id="fileName"></p>
+    </div>
+
+    <button class="analyze-btn" id="analyzeBtn" disabled>Analyze PDF Layout</button>
+
+    <div class="result-area" id="resultArea">
+        <h2>Layout Descriptions</h2>
+        <div id="resultContent"></div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const resultArea = document.getElementById('resultArea');
+        const resultContent = document.getElementById('resultContent');
+
+        let selectedFile = null;
+
+        // Handle drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        // Handle file input change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                alert('Please select a PDF file');
+                return;
+            }
+            selectedFile = file;
+            fileName.textContent = `Selected: ${file.name}`;
+            analyzeBtn.disabled = false;
+        }
+
+        function createPageRow(pageData) {
+            const row = document.createElement('div');
+            row.className = 'page-row';
+
+            row.innerHTML = `
+                <div class="page-thumbnail">
+                    <img src="data:image/png;base64,${pageData.thumbnail}" alt="Page ${pageData.page}">
+                </div>
+                <div class="page-description">
+                    <div class="page-header">Page ${pageData.page}</div>
+                    <div class="page-content">${escapeHtml(pageData.description)}</div>
+                </div>
+            `;
+
+            return row;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Handle analyze button click
+        analyzeBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            // Show loading state
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = 'Analyzing...';
+            resultArea.style.display = 'block';
+            resultContent.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Analyzing PDF pages with Claude...</p>
+                    <p class="progress-text">This may take a moment for multi-page documents.</p>
+                </div>
+            `;
+
+            try {
+                const formData = new FormData();
+                formData.append('pdf', selectedFile);
+
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    resultContent.innerHTML = `<div class="error">${escapeHtml(data.error)}</div>`;
+                } else {
+                    // Clear and display results
+                    resultContent.innerHTML = '';
+                    for (const page of data.pages) {
+                        resultContent.appendChild(createPageRow(page));
+                    }
+                }
+            } catch (error) {
+                resultContent.innerHTML = `<div class="error">Error: ${escapeHtml(error.message)}</div>`;
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Analyze PDF Layout';
+            }
+        });
+    </script>
+</body>
+</html>
