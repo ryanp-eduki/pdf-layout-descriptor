@@ -135,6 +135,67 @@
             width: auto;
             border: 1px solid #ddd;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .page-thumbnail img:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 90%;
+        }
+
+        .modal-content img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 5px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 5px 10px;
+        }
+
+        .modal-close:hover {
+            color: #ccc;
+        }
+
+        .modal-page-label {
+            text-align: center;
+            color: white;
+            margin-top: 15px;
+            font-size: 16px;
         }
 
         .page-description {
@@ -159,14 +220,15 @@
             flex: 1;
         }
 
-        .loading {
-            text-align: center;
-            padding: 40px;
+        .status-area {
             background: white;
             border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
 
-        .spinner {
+        .status-area .spinner {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #3498db;
             border-radius: 50%;
@@ -174,6 +236,12 @@
             height: 40px;
             animation: spin 1s linear infinite;
             margin: 0 auto 15px;
+        }
+
+        .status-message {
+            text-align: center;
+            color: #666;
+            font-size: 16px;
         }
 
         @keyframes spin {
@@ -189,9 +257,8 @@
             border-radius: 5px;
         }
 
-        .progress-text {
-            color: #666;
-            margin-top: 10px;
+        .pages-container {
+            /* Container for page results */
         }
     </style>
 </head>
@@ -212,7 +279,20 @@
 
     <div class="result-area" id="resultArea">
         <h2>Layout Descriptions</h2>
-        <div id="resultContent"></div>
+        <div class="status-area" id="statusArea" style="display: none;">
+            <div class="spinner"></div>
+            <p class="status-message" id="statusMessage">Starting analysis...</p>
+        </div>
+        <div class="pages-container" id="pagesContainer"></div>
+    </div>
+
+    <!-- Modal for enlarged thumbnail -->
+    <div class="modal" id="imageModal">
+        <div class="modal-content">
+            <button class="modal-close" id="modalClose">&times;</button>
+            <img id="modalImage" src="" alt="Enlarged page">
+            <p class="modal-page-label" id="modalPageLabel"></p>
+        </div>
     </div>
 
     <script>
@@ -221,9 +301,40 @@
         const fileName = document.getElementById('fileName');
         const analyzeBtn = document.getElementById('analyzeBtn');
         const resultArea = document.getElementById('resultArea');
-        const resultContent = document.getElementById('resultContent');
+        const statusArea = document.getElementById('statusArea');
+        const statusMessage = document.getElementById('statusMessage');
+        const pagesContainer = document.getElementById('pagesContainer');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const modalClose = document.getElementById('modalClose');
+        const modalPageLabel = document.getElementById('modalPageLabel');
 
         let selectedFile = null;
+
+        // Modal functions
+        function openModal(imageSrc, pageNum) {
+            modalImage.src = imageSrc;
+            modalPageLabel.textContent = `Page ${pageNum}`;
+            imageModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            imageModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        modalClose.addEventListener('click', closeModal);
+        imageModal.addEventListener('click', (e) => {
+            if (e.target === imageModal) {
+                closeModal();
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
 
         // Handle drag and drop
         dropZone.addEventListener('dragover', (e) => {
@@ -265,15 +376,23 @@
             const row = document.createElement('div');
             row.className = 'page-row';
 
+            const imageSrc = `data:image/png;base64,${pageData.thumbnail}`;
+
             row.innerHTML = `
                 <div class="page-thumbnail">
-                    <img src="data:image/png;base64,${pageData.thumbnail}" alt="Page ${pageData.page}">
+                    <img src="${imageSrc}" alt="Page ${pageData.page}" data-page="${pageData.page}">
                 </div>
                 <div class="page-description">
                     <div class="page-header">Page ${pageData.page}</div>
                     <div class="page-content">${escapeHtml(pageData.description)}</div>
                 </div>
             `;
+
+            // Add click handler for thumbnail
+            const img = row.querySelector('.page-thumbnail img');
+            img.addEventListener('click', () => {
+                openModal(imageSrc, pageData.page);
+            });
 
             return row;
         }
@@ -292,37 +411,67 @@
             analyzeBtn.disabled = true;
             analyzeBtn.textContent = 'Analyzing...';
             resultArea.style.display = 'block';
-            resultContent.innerHTML = `
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>Analyzing PDF pages with Claude...</p>
-                    <p class="progress-text">This may take a moment for multi-page documents.</p>
-                </div>
-            `;
+            statusArea.style.display = 'block';
+            statusMessage.textContent = 'Uploading PDF...';
+            pagesContainer.innerHTML = '';
 
             try {
+                // First, upload the PDF
                 const formData = new FormData();
                 formData.append('pdf', selectedFile);
 
-                const response = await fetch('/analyze', {
+                const uploadResponse = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
 
-                const data = await response.json();
+                const uploadData = await uploadResponse.json();
 
-                if (data.error) {
-                    resultContent.innerHTML = `<div class="error">${escapeHtml(data.error)}</div>`;
-                } else {
-                    // Clear and display results
-                    resultContent.innerHTML = '';
-                    for (const page of data.pages) {
-                        resultContent.appendChild(createPageRow(page));
-                    }
+                if (uploadData.error) {
+                    statusArea.style.display = 'none';
+                    pagesContainer.innerHTML = `<div class="error">${escapeHtml(uploadData.error)}</div>`;
+                    return;
                 }
+
+                // Now start SSE connection for analysis
+                const jobId = uploadData.job_id;
+                const eventSource = new EventSource(`/analyze/${jobId}`);
+
+                eventSource.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'status') {
+                        statusMessage.textContent = data.message;
+                    } else if (data.type === 'page') {
+                        // Add the page result
+                        pagesContainer.appendChild(createPageRow(data));
+                    } else if (data.type === 'complete') {
+                        statusArea.style.display = 'none';
+                        eventSource.close();
+                        analyzeBtn.disabled = false;
+                        analyzeBtn.textContent = 'Analyze PDF Layout';
+                    } else if (data.type === 'error') {
+                        statusArea.style.display = 'none';
+                        pagesContainer.innerHTML = `<div class="error">${escapeHtml(data.message)}</div>`;
+                        eventSource.close();
+                        analyzeBtn.disabled = false;
+                        analyzeBtn.textContent = 'Analyze PDF Layout';
+                    }
+                };
+
+                eventSource.onerror = () => {
+                    statusArea.style.display = 'none';
+                    if (pagesContainer.children.length === 0) {
+                        pagesContainer.innerHTML = `<div class="error">Connection lost. Please try again.</div>`;
+                    }
+                    eventSource.close();
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.textContent = 'Analyze PDF Layout';
+                };
+
             } catch (error) {
-                resultContent.innerHTML = `<div class="error">Error: ${escapeHtml(error.message)}</div>`;
-            } finally {
+                statusArea.style.display = 'none';
+                pagesContainer.innerHTML = `<div class="error">Error: ${escapeHtml(error.message)}</div>`;
                 analyzeBtn.disabled = false;
                 analyzeBtn.textContent = 'Analyze PDF Layout';
             }
